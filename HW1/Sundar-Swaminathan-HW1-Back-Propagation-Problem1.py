@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[27]:
+# In[5]:
 
 
 import numpy as np
@@ -22,7 +22,7 @@ learning_rate = 1.0
 
 error = float('inf')
 epoch = 0
-while epoch <= 6:
+while epoch <= 3:
     print("---new epoch---")
     y3 = w13 * x1 + w23 * x2
     print(f"y3 = {y3}")
@@ -61,8 +61,7 @@ while epoch <= 6:
 
     epoch += 1
     print("---end of epoch---")
-print(f"final y after 6 epochs = {o5} with error = {error}")
-print(epoch)
+print(f"final y after {epoch} epochs = {o5} with error = {error}")
 
 
 # In[ ]:
