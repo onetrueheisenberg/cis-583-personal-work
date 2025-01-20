@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[9]:
 
 
 import numpy as np
@@ -26,11 +26,13 @@ learning_rate = 0.8
 
 error = float('inf')
 epoch = 0
-while epoch <= 6:
+while epoch <= 3:
     print("---new epoch---")
     # Calculate Hidden outputs
     y5 = w15 * x1 + w25 * x2 + w35 * x3 + w45 * x4 + x0 * t5
     print(f"y5 = {y5}")
+    # In the video when calculating y6, the author uses w15 * x1 instead of w16 * x1 which causes a deviation of 0.2 - 
+    # it results in the layer input being 1.2 instead of 1.0. I have corrected this in the below calculation
     y6 = w16 * x1 + w26 * x2 + w36 * x3 + w46 * x4 + x0 * t6
     print(f"y6 = {y6}")
     h5 = sigmoid(y5)
@@ -88,4 +90,10 @@ while epoch <= 6:
     print("---end of epoch---")
 print(f"final y after {epoch} epochs = {o7} with error = {error}")
 print(epoch)
+
+
+# In[ ]:
+
+
+
 
