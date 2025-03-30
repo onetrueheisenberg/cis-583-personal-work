@@ -316,6 +316,124 @@ print(f"Homogeneity: {texture_features[3]:.4f}")
 
 # plt.show()
 
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+import random
+# Define dataset path
+dataset_path = "landscape_dataset/landscape Images"
+gray_folder = os.path.join(dataset_path, "gray")
+color_folder = os.path.join(dataset_path, "color")
+
+# Load a sample grayscale and color image
+gray_sample_path = os.path.join(gray_folder, os.listdir(gray_folder)[0])
+color_sample_path = os.path.join(color_folder, os.listdir(color_folder)[0])
+
+# Read grayscale and color images
+gray_img = cv2.imread(gray_sample_path, cv2.IMREAD_GRAYSCALE)
+color_img = cv2.imread(color_sample_path)
+color_img = cv2.cvtColor(color_img, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB for visualization
+
+# Display original images
+plt.figure(figsize=(8, 4))
+plt.subplot(1, 2, 1)
+plt.imshow(gray_img, cmap='gray')
+plt.title("Original Grayscale Image")
+
+plt.subplot(1, 2, 2)
+plt.imshow(color_img)
+plt.title("Original Color Image")
+plt.show()
+
+# 1. Horizontal Flip
+def horizontal_flip(img):
+    return cv2.flip(img, 1)
+
+# 2. Vertical Flip
+def vertical_flip(img):
+    return cv2.flip(img, 0)
+
+# 3. Rotate by an angle
+def rotate_image(img, angle=30):
+    h, w = img.shape[:2]
+    center = (w // 2, h // 2)
+    rotation_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+    return cv2.warpAffine(img, rotation_matrix, (w, h))
+
+# 4. Adjust Brightness
+def adjust_brightness(img, factor=1.5):
+    hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+    hsv[:, :, 2] = np.clip(hsv[:, :, 2] * factor, 0, 255)
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
+
+# 5. Apply Gaussian Blur
+def apply_blur(img, kernel_size=5):
+    return cv2.GaussianBlur(img, (kernel_size, kernel_size), 0)
+
+# 6. Add Random Noise
+def add_noise(img):
+    noise = np.random.randint(0, 50, img.shape, dtype='uint8')
+    noisy_img = cv2.add(img, noise)
+    return np.clip(noisy_img, 0, 255)
+
+# 7. Random Cropping
+def random_crop(img, crop_size=50):
+    h, w = img.shape[:2]
+    x = random.randint(0, w - crop_size)
+    y = random.randint(0, h - crop_size)
+    return img[y:y + crop_size, x:x + crop_size]
+
+# 8. Resize Image
+def resize_image(img, scale=1.5):
+    new_size = (int(img.shape[1] * scale), int(img.shape[0] * scale))
+    return cv2.resize(img, new_size)
+
+# Apply augmentations to the color image
+aug_images = {
+    "Original": color_img,
+    "Horizontal Flip": horizontal_flip(color_img),
+    "Vertical Flip": vertical_flip(color_img),
+    "Rotated (30°)": rotate_image(color_img, 30),
+    "Brightened": adjust_brightness(color_img, 1.5),
+    "Blurred": apply_blur(color_img, 5),
+    "With Noise": add_noise(color_img),
+    "Resized (1.5x)": resize_image(color_img, 1.5),
+}
+
+# Display original vs augmented images
+plt.figure(figsize=(12, 8))
+for i, (title, img) in enumerate(aug_images.items()):
+    plt.subplot(3, 3, i + 1)
+    plt.imshow(img)
+    plt.title(title)
+    plt.axis('off')
+
+plt.tight_layout()
+plt.show()
+
+# Apply augmentations to the grayscale image
+aug_gray_images = {
+    "Original": gray_img,
+    "Horizontal Flip": horizontal_flip(gray_img),
+    "Vertical Flip": vertical_flip(gray_img),
+    "Rotated (30°)": rotate_image(gray_img, 30),
+    "Blurred": apply_blur(gray_img, 5),
+    "With Noise": add_noise(gray_img),
+    "Resized (1.5x)": resize_image(gray_img, 1.5),
+}
+
+# Display original vs augmented grayscale images
+plt.figure(figsize=(12, 8))
+for i, (title, img) in enumerate(aug_gray_images.items()):
+    plt.subplot(3, 3, i + 1)
+    plt.imshow(img, cmap='gray')
+    plt.title(title)
+    plt.axis('off')
+
+plt.tight_layout()
+plt.show()
+
 gray_folder = "landscape_dataset/landscape Images/gray"
 color_folder = "landscape_dataset/landscape Images/color"
 
