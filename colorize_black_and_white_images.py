@@ -51,6 +51,7 @@ else:
 
 """**To check Image sizes,aspect ratios and Descriptive Statistics**"""
 
+# @title To check Image sizes,aspect ratios and Descriptive Statistics
 import cv2
 import pandas as pd
 import os
@@ -81,6 +82,8 @@ print(df_shapes.describe())
 
 """**Histogram of Image Width and Height and Aspect Ratio Distribution**"""
 
+# @title Histogram of Image Width and Height and Aspect Ratio Distribution
+
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -108,6 +111,7 @@ plt.show()
 
 """**Visualizing the samples **"""
 
+# @title Visualizing the samples
 import random
 import matplotlib.pyplot as plt
 
@@ -154,6 +158,7 @@ show_sample_images(color_folder, "Sample Color Images")
 
 """
 
+# @title RGB Channel Distribution
 def plot_rgb_histogram(image_path):
     img = cv2.imread(image_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -178,6 +183,7 @@ if os.path.exists(color_folder):
 
 """Image Size Distribution"""
 
+# @title Image Size Distribution
 import os
 import cv2
 import pandas as pd
@@ -229,6 +235,7 @@ else:
 
 """Mean and Standard Deviation of Images"""
 
+# @title Mean and Standard Deviation of Images
 import numpy as np
 import cv2
 
@@ -255,6 +262,7 @@ plt.show()
 
 """**Image Brightness distribution**"""
 
+# @title Image Brightness distribution
 brightness_values = []
 
 for folder in [gray_folder, color_folder]:
@@ -274,6 +282,7 @@ plt.show()
 
 """Texture Analysis using Gray-level CO-occurence Matrix"""
 
+# @title Texture Analysis using Gray-level CO-occurence Matrix
 import skimage.feature as skf
 
 def get_texture_features(image_path):
@@ -323,6 +332,7 @@ print(f"Homogeneity: {texture_features[3]:.4f}")
 
 # plt.show()
 
+# @title Image flip
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -441,9 +451,11 @@ for i, (title, img) in enumerate(aug_gray_images.items()):
 plt.tight_layout()
 plt.show()
 
+# @title Dataset path
 gray_folder = "landscape_dataset/landscape Images/gray"
 color_folder = "landscape_dataset/landscape Images/color"
 
+# @title Reconstructed
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -584,7 +596,7 @@ plt.show()
 
 # plt.show()
 
-#Rahul Work GAN
+"""**GAN-based Image Colorization using Custom Landscape Dataset**"""
 
 # GAN-based Image Colorization using Custom Landscape Dataset (Final Version with Feature Matching & LR Scheduler)
 
@@ -681,7 +693,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 G = Generator().to(device)
 D = Discriminator().to(device)
 
-criterion_GAN = nn.MSELoss()
+criterion_GAN = nn.BCELoss()
 criterion_L1 = nn.L1Loss()
 
 optimizer_G = optim.Adam(G.parameters(), lr=2e-4, betas=(0.5, 0.999))
@@ -846,3 +858,721 @@ for idx in test_ids:
     color_path = f"{color_folder}/{idx}.jpg"
     print(f"\nEvaluating image {idx}.jpg:")
     colorize_and_evaluate(gray_path, color_path)
+
+"""CNN"""
+
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader, random_split
+from torchvision import transforms
+from PIL import Image
+import matplotlib.pyplot as plt
+import numpy as np
+from skimage.metrics import structural_similarity as ssim
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", device)
+
+# dataset
+class LandscapeColorizationDataset(Dataset):
+    def __init__(self, gray_folder, color_folder, transform=None):
+        self.gray_folder = gray_folder
+        self.color_folder = color_folder
+        self.gray_images = sorted(os.listdir(gray_folder))
+        self.color_images = sorted(os.listdir(color_folder))
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.gray_images)
+
+    def __getitem__(self, idx):
+        gray_path = os.path.join(self.gray_folder, self.gray_images[idx])
+        color_path = os.path.join(self.color_folder, self.color_images[idx])
+
+        gray_image = Image.open(gray_path).convert("L")
+        color_image = Image.open(color_path).convert("RGB")
+
+        if self.transform:
+            gray_image = self.transform(gray_image)
+            color_image = self.transform(color_image)
+
+        return gray_image, color_image
+
+# dataset path
+dataset_path = "landscape_dataset/landscape Images"
+gray_folder = os.path.join(dataset_path, "gray")
+color_folder = os.path.join(dataset_path, "color")
+
+transform = transforms.Compose([
+    transforms.Resize((128, 128)),
+    transforms.ToTensor()
+])
+
+dataset = LandscapeColorizationDataset(gray_folder, color_folder, transform)
+
+# splitting data
+train_size = int(0.8 * len(dataset))
+test_size = len(dataset) - train_size
+train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+
+print(f"Total images: {len(dataset)}")
+print(f"Training set: {len(train_dataset)} images")
+print(f"Test set: {len(test_dataset)} images")
+
+#  AUTOENCODER MODEL
+class ColorizationAutoencoder(nn.Module):
+    def __init__(self):
+        super(ColorizationAutoencoder, self).__init__()
+
+        # Encoder
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 64, kernel_size=3, stride=2, padding=1),   # 64x64
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1), # 32x32
+            nn.ReLU(),
+            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1), # 16x16
+            nn.ReLU()
+        )
+
+        # Decoder
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2, padding=1), # 32x32
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1),  # 64x64
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 3, kernel_size=4, stride=2, padding=1),    # 128x128
+            nn.Sigmoid()  # Output RGB in range [0,1]
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+model = ColorizationAutoencoder().to(device)
+criterion = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# evaualtion metrics
+def compute_mae(pred, target):
+    return torch.mean(torch.abs(pred - target)).item()
+
+def compute_ssim_batch(pred, target):
+    pred_np = pred.detach().cpu().numpy()
+    target_np = target.detach().cpu().numpy()
+    scores = []
+    for i in range(pred_np.shape[0]):
+        p = np.transpose(pred_np[i], (1, 2, 0))
+        t = np.transpose(target_np[i], (1, 2, 0))
+        scores.append(ssim(p, t, channel_axis=2, data_range=1.0))
+    return np.mean(scores)
+
+def compute_psnr(pred, target):
+    pred_np = pred.detach().cpu().numpy()
+    target_np = target.detach().cpu().numpy()
+    mse = np.mean((pred_np - target_np) ** 2)
+    return 20 * np.log10(1.0 / np.sqrt(mse)) if mse > 0 else float('inf')
+
+# training the model
+EPOCHS = 50
+mae_list, ssim_list, psnr_list = [], [], []
+
+for epoch in range(EPOCHS):
+    model.train()
+    running_loss = 0.0
+    total_mae, total_ssim, total_psnr = 0.0, 0.0, 0.0
+
+    for i, (gray, color) in enumerate(train_loader):
+        gray, color = gray.to(device), color.to(device)
+
+        outputs = model(gray)
+        loss = criterion(outputs, color)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+        total_mae += compute_mae(outputs, color)
+        total_ssim += compute_ssim_batch(outputs, color)
+        total_psnr += compute_psnr(outputs, color)
+
+    avg_loss = running_loss / len(train_loader)
+    avg_mae = total_mae / len(train_loader)
+    avg_ssim = total_ssim / len(train_loader)
+    avg_psnr = total_psnr / len(train_loader)
+
+    mae_list.append(avg_mae)
+    ssim_list.append(avg_ssim)
+    psnr_list.append(avg_psnr)
+
+    print(f"Epoch [{epoch+1}/{EPOCHS}] Loss={avg_loss:.4f}, MAE={avg_mae:.4f}, SSIM={avg_ssim:.4f}, PSNR={avg_psnr:.2f}dB")
+
+# test evaluation
+print("\nEvaluating on test set...")
+model.eval()
+test_mae, test_ssim, test_psnr = 0.0, 0.0, 0.0
+
+with torch.no_grad():
+    for gray, color in test_loader:
+        gray, color = gray.to(device), color.to(device)
+        outputs = model(gray)
+        test_mae += compute_mae(outputs, color)
+        test_ssim += compute_ssim_batch(outputs, color)
+        test_psnr += compute_psnr(outputs, color)
+
+avg_test_mae = test_mae / len(test_loader)
+avg_test_ssim = test_ssim / len(test_loader)
+avg_test_psnr = test_psnr / len(test_loader)
+
+print(f"\nTest MAE: {avg_test_mae:.4f}")
+print(f"Test SSIM: {avg_test_ssim:.4f}")
+print(f"Test PSNR: {avg_test_psnr:.2f} dB")
+
+# plots-
+epochs = range(1, EPOCHS + 1)
+plt.figure(figsize=(12, 4))
+
+plt.subplot(1, 3, 1)
+plt.plot(epochs, mae_list, 'b-', label='MAE')
+plt.title('Mean Absolute Error')
+plt.xlabel('Epoch')
+plt.ylabel('MAE')
+plt.grid(True)
+
+plt.subplot(1, 3, 2)
+plt.plot(epochs, ssim_list, 'g-', label='SSIM')
+plt.title('SSIM')
+plt.xlabel('Epoch')
+plt.ylabel('SSIM')
+plt.grid(True)
+
+plt.subplot(1, 3, 3)
+plt.plot(epochs, psnr_list, 'm-', label='PSNR')
+plt.title('PSNR')
+plt.xlabel('Epoch')
+plt.ylabel('PSNR (dB)')
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
+
+# predicitons
+import torchvision.transforms.functional as TF
+
+def show_predictions(model, loader, num_images=5):
+    model.eval()
+    fig, axs = plt.subplots(num_images, 3, figsize=(10, 4 * num_images))
+
+    with torch.no_grad():
+        count = 0
+        for gray, color in loader:
+            gray = gray.to(device)
+            outputs = model(gray)
+
+            for i in range(gray.size(0)):
+                if count >= num_images:
+                    break
+
+                inp = gray[i].cpu().squeeze(0)  # (128, 128)
+                pred = outputs[i].cpu().permute(1, 2, 0).numpy()
+                tgt = color[i].cpu().permute(1, 2, 0).numpy()
+
+                axs[count, 0].imshow(inp, cmap='gray')
+                axs[count, 0].set_title("Grayscale Input")
+                axs[count, 0].axis('off')
+
+                axs[count, 1].imshow(tgt)
+                axs[count, 1].set_title("Ground Truth Color")
+                axs[count, 1].axis('off')
+
+                axs[count, 2].imshow(pred)
+                axs[count, 2].set_title("Predicted Color")
+                axs[count, 2].axis('off')
+
+                count += 1
+
+            if count >= num_images:
+                break
+
+    plt.tight_layout()
+    plt.show()
+
+# Call the function
+show_predictions(model, test_loader, num_images=5)
+
+# Upload and predict block
+from google.colab import files
+from IPython.display import display
+
+uploaded = files.upload()
+
+for filename in uploaded.keys():
+    # Preprocess the uploaded grayscale image
+    img = Image.open(filename).convert("L")
+    img_resized = img.resize((128, 128))
+    img_tensor = transforms.ToTensor()(img_resized).unsqueeze(0).to(device)  # Shape: (1, 1, 128, 128)
+
+    # Run model prediction
+    model.eval()
+    with torch.no_grad():
+        output = model(img_tensor)
+
+    # Prepare input and output for visualization
+    input_image = img_tensor.squeeze(0).squeeze(0).cpu().numpy()            # (128, 128)
+    output_image = output.squeeze(0).permute(1, 2, 0).cpu().numpy()         # (128, 128, 3)
+
+    # plot
+    plt.figure(figsize=(8, 4))
+    plt.subplot(1, 2, 1)
+    plt.imshow(input_image, cmap='gray')
+    plt.title("Grayscale Input")
+    plt.axis('off')
+
+    plt.subplot(1, 2, 2)
+    plt.imshow(output_image)
+    plt.title("Predicted Color")
+    plt.axis('off')
+
+    plt.tight_layout()
+    plt.show()
+
+"""** CNN with LAB**"""
+
+import os
+import numpy as np
+from PIL import Image
+import matplotlib.pyplot as plt
+
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader, random_split
+from torchvision import transforms
+
+from skimage.color import rgb2lab, lab2rgb
+from skimage.metrics import structural_similarity as ssim
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", device)
+
+# dataset
+class ColorizationDataset(Dataset):
+    def __init__(self, gray_folder, color_folder, transform=None):
+        self.gray_folder = gray_folder
+        self.color_folder = color_folder
+        self.gray_images = sorted(os.listdir(gray_folder))
+        self.color_images = sorted(os.listdir(color_folder))
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.gray_images)
+
+    def __getitem__(self, idx):
+        gray_path = os.path.join(self.gray_folder, self.gray_images[idx])
+        color_path = os.path.join(self.color_folder, self.color_images[idx])
+
+        # Load grayscale input and RGB target
+        gray_img = Image.open(gray_path).convert("L")
+        color_img = Image.open(color_path).convert("RGB").resize((128, 128))
+
+        # Convert RGB to LAB
+        lab = rgb2lab(np.array(color_img)).astype("float32")
+        L = lab[:, :, 0] / 100.0           # Normalize L to [0, 1]
+        AB = lab[:, :, 1:] / 128.0         # Normalize AB to [-1, 1]
+
+        if self.transform:
+            gray_img = self.transform(gray_img)
+
+        # Convert to torch tensors
+        L_tensor = torch.from_numpy(L).unsqueeze(0)
+        AB_tensor = torch.from_numpy(AB).permute(2, 0, 1)
+
+        return L_tensor, AB_tensor
+
+# dataset paths
+dataset_path = "landscape_dataset/landscape Images"
+gray_folder = os.path.join(dataset_path, "gray")
+color_folder = os.path.join(dataset_path, "color")
+
+transform = transforms.Compose([
+    transforms.Resize((128, 128)),
+    transforms.ToTensor()
+])
+
+dataset = ColorizationDataset(gray_folder, color_folder, transform)
+
+# Split into train and test
+train_size = int(0.8 * len(dataset))
+test_size = len(dataset) - train_size
+train_data, test_data = random_split(dataset, [train_size, test_size])
+
+train_loader = DataLoader(train_data, batch_size=16, shuffle=True)
+test_loader = DataLoader(test_data, batch_size=16, shuffle=False)
+
+# model
+class Autoencoder(nn.Module):
+    def __init__(self):
+        super(Autoencoder, self).__init__()
+
+        self.encoder = nn.Sequential(
+            nn.Conv2d(1, 64, 3, 2, 1),   # 128 -> 64
+            nn.ReLU(),
+            nn.Conv2d(64, 128, 3, 2, 1), # 64 -> 32
+            nn.ReLU(),
+            nn.Conv2d(128, 256, 3, 2, 1), # 32 -> 16
+            nn.ReLU()
+        )
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, 4, 2, 1), # 16 -> 32
+            nn.ReLU(),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1),  # 32 -> 64
+            nn.ReLU(),
+            nn.ConvTranspose2d(64, 2, 4, 2, 1),    # 64 -> 128
+            nn.Tanh()
+        )
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+model = Autoencoder().to(device)
+loss_function = nn.MSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# evaluation metrics
+def calc_mae(pred, target):
+    return torch.mean(torch.abs(pred - target)).item()
+
+def calc_ssim(pred, target):
+    pred_np = pred.detach().cpu().numpy()
+    target_np = target.detach().cpu().numpy()
+    scores = []
+    for i in range(pred_np.shape[0]):
+        p = np.transpose(pred_np[i], (1, 2, 0))
+        t = np.transpose(target_np[i], (1, 2, 0))
+        scores.append(ssim(p, t, channel_axis=2, data_range=2.0))
+    return np.mean(scores)
+
+def calc_psnr(pred, target):
+    pred_np = pred.detach().cpu().numpy()
+    target_np = target.detach().cpu().numpy()
+    mse = np.mean((pred_np - target_np) ** 2)
+    return 20 * np.log10(1.0 / np.sqrt(mse)) if mse > 0 else float('inf')
+
+# training
+EPOCHS = 40
+mae_history, ssim_history, psnr_history = [], [], []
+
+for epoch in range(EPOCHS):
+    model.train()
+    total_loss, total_mae, total_ssim, total_psnr = 0, 0, 0, 0
+
+    for L, AB in train_loader:
+        L, AB = L.to(device), AB.to(device)
+        pred_AB = model(L)
+
+        loss = loss_function(pred_AB, AB)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+        total_mae += calc_mae(pred_AB, AB)
+        total_ssim += calc_ssim(pred_AB, AB)
+        total_psnr += calc_psnr(pred_AB, AB)
+
+    avg_loss = total_loss / len(train_loader)
+    avg_mae = total_mae / len(train_loader)
+    avg_ssim = total_ssim / len(train_loader)
+    avg_psnr = total_psnr / len(train_loader)
+
+    mae_history.append(avg_mae)
+    ssim_history.append(avg_ssim)
+    psnr_history.append(avg_psnr)
+
+    print(f"Epoch [{epoch+1}/{EPOCHS}] Loss: {avg_loss:.4f} | MAE: {avg_mae:.4f} | SSIM: {avg_ssim:.4f} | PSNR: {avg_psnr:.2f} dB")
+
+# test evalution
+model.eval()
+test_mae, test_ssim, test_psnr = 0.0, 0.0, 0.0
+
+with torch.no_grad():
+    for L, AB in test_loader:
+        L, AB = L.to(device), AB.to(device)
+        pred_AB = model(L)
+
+        test_mae += calc_mae(pred_AB, AB)
+        test_ssim += calc_ssim(pred_AB, AB)
+        test_psnr += calc_psnr(pred_AB, AB)
+
+print(f"\nTest MAE: {test_mae / len(test_loader):.4f}")
+print(f"Test SSIM: {test_ssim / len(test_loader):.4f}")
+print(f"Test PSNR: {test_psnr / len(test_loader):.2f} dB")
+
+# plot
+plt.figure(figsize=(12, 4))
+plt.subplot(1, 3, 1)
+plt.plot(mae_history); plt.title("MAE"); plt.grid(True)
+plt.subplot(1, 3, 2)
+plt.plot(ssim_history); plt.title("SSIM"); plt.grid(True)
+plt.subplot(1, 3, 3)
+plt.plot(psnr_history); plt.title("PSNR"); plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# outputs
+def show_predictions(model, loader, num_images=5):
+    model.eval()
+    fig, axs = plt.subplots(num_images, 3, figsize=(10, 4 * num_images))
+
+    with torch.no_grad():
+        count = 0
+        for L, AB in loader:
+            L = L.to(device)
+            pred_AB = model(L)
+
+            for i in range(L.size(0)):
+                if count >= num_images:
+                    break
+
+                # Convert LAB to RGB
+                L_img = L[i].cpu().squeeze().numpy() * 100
+                true_AB = AB[i].cpu().numpy().transpose(1, 2, 0) * 128
+                pred_AB_np = pred_AB[i].cpu().numpy().transpose(1, 2, 0) * 128
+
+                true_rgb = lab2rgb(np.dstack((L_img, true_AB)))
+                pred_rgb = lab2rgb(np.dstack((L_img, pred_AB_np)))
+
+                axs[count, 0].imshow(L_img, cmap='gray'); axs[count, 0].set_title("Input L")
+                axs[count, 1].imshow(true_rgb); axs[count, 1].set_title("Ground Truth")
+                axs[count, 2].imshow(pred_rgb); axs[count, 2].set_title("Prediction")
+                for j in range(3): axs[count, j].axis('off')
+                count += 1
+
+            if count >= num_images:
+                break
+
+    plt.tight_layout()
+    plt.show()
+
+# predicitions
+show_predictions(model, test_loader, num_images=5)
+
+# ----------------- Upload and Colorize Custom Image (Fixed) -----------------
+from google.colab import files
+from IPython.display import display
+
+uploaded = files.upload()
+
+for filename in uploaded.keys():
+    if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        # Load and preprocess image
+        img = Image.open(filename).convert("RGB").resize((128, 128))
+        lab = rgb2lab(np.array(img)).astype("float32")
+        L = lab[:, :, 0] / 100.0
+        L_tensor = torch.from_numpy(L).unsqueeze(0).unsqueeze(0).to(device)
+
+        # Model inference
+        model.eval()
+        with torch.no_grad():
+            pred_AB = model(L_tensor).cpu().squeeze().numpy().transpose(1, 2, 0) * 256  # shape: (128, 128, 2)
+
+        # Convert LAB back to RGB
+        L_np = L_tensor.cpu().squeeze().numpy() * 100  # shape: (128, 128)
+        lab_combined = np.dstack((L_np, pred_AB))      # shape: (128, 128, 3)
+        output_rgb = lab2rgb(lab_combined)             # Convert to RGB format
+
+        # Plot input and output
+        plt.figure(figsize=(8, 4))
+        plt.subplot(1, 2, 1)
+        plt.imshow(L_np, cmap='gray')
+        plt.title("Input Grayscale (L)")
+        plt.axis('off')
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(output_rgb)
+        plt.title("Colorized Output")
+        plt.axis('off')
+
+        plt.tight_layout()
+        plt.show()
+    else:
+        print(f"Unsupported file type: {filename}")
+
+"""# **U-Net**"""
+
+import cv2
+import numpy as np
+import os
+from tqdm import tqdm
+
+def load_gray_color_pairs(gray_folder, color_folder, image_size=(256, 256), max_images=None):
+    gray_images = sorted(os.listdir(gray_folder))
+    color_images = sorted(os.listdir(color_folder))
+
+    if max_images:
+        gray_images = gray_images[:max_images]
+        color_images = color_images[:max_images]
+
+    X_L, Y_ab = [], []
+
+    for g_file, c_file in tqdm(zip(gray_images, color_images), total=len(gray_images)):
+        gray_img = cv2.imread(os.path.join(gray_folder, g_file), cv2.IMREAD_GRAYSCALE)
+        color_img = cv2.imread(os.path.join(color_folder, c_file))
+
+        if gray_img is None or color_img is None:
+            continue
+
+        gray_img = cv2.resize(gray_img, image_size)
+        color_img = cv2.resize(color_img, image_size)
+
+        lab_img = cv2.cvtColor(color_img, cv2.COLOR_BGR2LAB)
+        L = lab_img[:, :, 0] / 255.0
+        ab = lab_img[:, :, 1:] / 128.0
+
+        X_L.append(L[..., np.newaxis])   # shape: (H, W, 1)
+        Y_ab.append(ab)                  # shape: (H, W, 2)
+
+    return np.array(X_L), np.array(Y_ab)
+
+gray_folder = "landscape_dataset/landscape Images/gray"
+color_folder = "landscape_dataset/landscape Images/color"
+
+X_L, Y_ab = load_gray_color_pairs(gray_folder, color_folder, image_size=(256, 256), max_images=1000)
+print("Grayscale input shape:", X_L.shape)
+print("AB color output shape:", Y_ab.shape)
+
+import matplotlib.pyplot as plt
+
+idx = np.random.randint(0, len(X_L))
+
+plt.figure(figsize=(12, 4))
+
+# Input grayscale (L)
+plt.subplot(1, 2, 1)
+plt.title("Grayscale (L channel)")
+plt.imshow(X_L[idx].squeeze(), cmap='gray')
+plt.axis('off')
+
+# Reconstructed color image from LAB
+L = X_L[idx]
+ab = Y_ab[idx]
+L_rescaled = L * 255.0
+ab_rescaled = ab * 128.0
+lab = np.concatenate((L_rescaled, ab_rescaled), axis=2).astype(np.uint8)
+color_img = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
+plt.subplot(1, 2, 2)
+plt.title("Original Color (from LAB)")
+plt.imshow(color_img)
+plt.axis('off')
+
+plt.show()
+
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, UpSampling2D, concatenate
+from tensorflow.keras.models import Model
+
+def build_unet(input_shape=(256, 256, 1)):
+    inputs = Input(shape=input_shape)
+
+    # Encoder
+    c1 = Conv2D(64, 3, activation='relu', padding='same')(inputs)
+    p1 = MaxPooling2D()(c1)
+
+    c2 = Conv2D(128, 3, activation='relu', padding='same')(p1)
+    p2 = MaxPooling2D()(c2)
+
+    c3 = Conv2D(256, 3, activation='relu', padding='same')(p2)
+    p3 = MaxPooling2D()(c3)
+
+    c4 = Conv2D(512, 3, activation='relu', padding='same')(p3)
+    #c4 = Dropout(0.3)(c4)
+
+    # Decoder
+    u1 = UpSampling2D()(c4)
+    m1 = concatenate([u1, c3])
+    c5 = Conv2D(256, 3, activation='relu', padding='same')(m1)
+
+    u2 = UpSampling2D()(c5)
+    m2 = concatenate([u2, c2])
+    c6 = Conv2D(128, 3, activation='relu', padding='same')(m2)
+
+    u3 = UpSampling2D()(c6)
+    m3 = concatenate([u3, c1])
+    c7 = Conv2D(64, 3, activation='relu', padding='same')(m3)
+
+    outputs = Conv2D(2, 1, activation='linear', padding='same')(c7)  # Predict AB channels
+
+    model = Model(inputs, outputs)
+    return model
+
+from tensorflow.keras.optimizers import Adam
+from sklearn.model_selection import train_test_split
+
+# Split data
+X_train, X_val, y_train, y_val = train_test_split(X_L, Y_ab, test_size=0.1, random_state=42)
+
+# Build and compile
+model = build_unet()
+model.compile(optimizer=Adam(1e-4), loss='mae')
+
+# Train
+model.fit(
+    X_train, y_train,
+    validation_data=(X_val, y_val),
+    epochs=50,
+    batch_size=16
+)
+
+import matplotlib.pyplot as plt
+
+def postprocess(L, ab):
+    L = L * 128.0
+    ab = ab * 128.0
+    lab = np.concatenate((L, ab), axis=2).astype(np.uint8)
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
+# Pick a random sample from validation set
+idx = np.random.randint(0, len(X_val))
+
+L_input = X_val[idx:idx+1]
+true_ab = y_train[idx]
+pred_ab = model.predict(L_input)[0]
+
+# Combine predicted AB with L to get RGB image
+colorized_img = postprocess(L_input[0], pred_ab)
+
+# Display images
+plt.figure(figsize=(12, 4))
+
+# Grayscale Input
+plt.subplot(1, 3, 1)
+plt.title("Grayscale Input")
+plt.imshow(L_input[0].squeeze(), cmap='gray')
+plt.axis('off')
+
+# Ground Truth Color
+L_gt = L_input[0]
+ab_gt = y_val[idx]
+gt_img = postprocess(L_gt, ab_gt)
+plt.subplot(1, 3, 2)
+plt.title("Ground Truth")
+plt.imshow(gt_img)
+plt.axis('off')
+
+# Predicted Color
+plt.subplot(1, 3, 3)
+plt.title("Colorized Output")
+plt.imshow(colorized_img)
+plt.axis('off')
+
+plt.show()
